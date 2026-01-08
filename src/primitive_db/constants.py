@@ -1,0 +1,1 @@
+FILE_PATH = "/home/alina/Рабочий стол/study/project2_Ageeva_Alina_M25-555/src/primitive_db/db_meta.json"
