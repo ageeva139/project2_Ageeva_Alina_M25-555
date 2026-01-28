@@ -133,3 +133,56 @@ def select(table_data, where_clause=None):
             result.append(row)
 
     return result
+
+def update(table_data, set_clause, where_clause):
+    #обновляем записи в таблице
+
+    #если нет условий - ничего не обновляем
+    if where_clause is None or where_clause == {}:
+        return table_data
+
+    for row in table_data:
+        is_match = True
+
+        #ищем подходящие записи
+        for key, value in where_clause.items():
+            if key not in row:
+                is_match = False
+                break
+            if row[key] != value:
+                is_match = False
+                break
+
+        #обновляем поля
+        if is_match:
+            for key, value in set_clause.items():
+                row[key] = value
+
+    return table_data
+
+def delete(table_data, where_clause):
+    #удаляем записи из таблицы
+
+    #если нет условий - ничего не удаляем
+    if where_clause is None or where_clause == {}:
+        return table_data
+
+    new_data = []
+
+    for row in table_data:
+        is_match = True
+
+        #ищем подходящие записи
+        for key, value in where_clause.items():
+            if key not in row:
+                is_match = False
+                break
+            if row[key] != value:
+                is_match = False
+                break
+
+        #если не совпало - оставляем запись
+        if not is_match:
+            new_data.append(row)
+
+    return new_data
