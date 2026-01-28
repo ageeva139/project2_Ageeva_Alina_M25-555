@@ -1,5 +1,7 @@
 import shlex
 
+from prettytable import PrettyTable
+
 from .constants import FILE_PATH
 from .core import create_table, delete, drop_table, insert, list_tables, select, update
 from .utils import load_metadata, load_table_data, save_metadata, save_table_data
@@ -27,6 +29,21 @@ def show_help():
     print("\nОбщие команды:")
     print("<command> exit - выход из программы")
     print("<command> help - справочная информация\n")
+
+def print_table(rows):
+    #оформленный вывод таблицы
+    if rows == []:
+        print("Подходящих записей не найдено")
+        return
+
+    columns = list(rows[0].keys())
+    table = PrettyTable()
+    table.field_names = columns
+
+    for row in rows:
+        table.add_row([row.get(col) for col in columns])
+
+    print(table)
 
 def parse_conditions(schema, items):
     #разбираем список условий и превращаем в словари
@@ -116,6 +133,7 @@ def run():
             new_metadata = create_table(metadata, table_name, columns)
             if new_metadata is not None:
                 save_metadata(FILE_PATH, new_metadata)
+                save_table_data(table_name, [])
                 print(f"Таблица '{table_name}' успешно создана")
 
         elif command == "list_tables": #список таблиц
@@ -182,11 +200,7 @@ def run():
 
             result = select(table_data, where_clause)
 
-            if result == []:
-                print("Подходящих записей не найдено")
-            else:
-                for row in result:
-                    print(row)
+            print_table(result)
 
         elif command == "delete": #удалить записи из таблицы
             metadata = load_metadata(FILE_PATH)
