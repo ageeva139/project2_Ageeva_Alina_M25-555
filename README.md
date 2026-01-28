@@ -62,4 +62,4 @@ help - справочная информация
 Выход из программы...
 
 # Демонстрация
-
+https://asciinema.org/a/E1lA3rY5CQVbbilz
