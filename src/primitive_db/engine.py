@@ -1,7 +1,7 @@
 import shlex
 
 from .constants import FILE_PATH
-from .core import create_table, drop_table, insert, list_tables, select
+from .core import create_table, delete, drop_table, insert, list_tables, select, update
 from .utils import load_metadata, load_table_data, save_metadata, save_table_data
 
 
@@ -14,11 +14,74 @@ def show_help():
     print("<command> drop_table <имя_таблицы> - удалить таблицу")
     print("<command> insert <имя_таблицы> <значение1> <значение2> .. - добавить запись")
     print("<command> select <имя_таблицы> [столбец=значение] .. - выбрать записи")
-    
+    print("<command> delete <имя_таблицы> столбец=значение .. - удалить записи")
+    print("<command> update <имя_таблицы> set столбец=значение ..")
+    print("                 where столбец=значение .. - обновить записи")
+
+
+    print("\nУсловия для команд select, delete, update:")
+    print("  - формат: столбец=значение (без пробелов вокруг '=')")
+    print("  - несколько условий разделяйте пробелом")
+    print('  - если значение строковое, используйте кавычки: name="Иван Иванов"')
+
     print("\nОбщие команды:")
     print("<command> exit - выход из программы")
-    print("<command> help - справочная информация\n") 
+    print("<command> help - справочная информация\n")
 
+def parse_conditions(schema, items):
+    #разбираем список условий и превращаем в словари
+    result = {}
+    for item in items:
+        if item.lower() == "and":
+            continue
+
+        if "=" not in item:
+            print("Ошибка: условие должно быть в формате столбец=значение")
+            return
+
+        key, raw_value = item.split("=", 1)
+        key = key.strip()
+        raw_value = raw_value.strip()
+
+        if key not in schema:
+            print(f"Ошибка: столбца '{key}' нет в схеме таблицы")
+            return
+
+        column_type = schema[key]
+
+        if column_type == "int":
+            try:
+                result[key] = int(raw_value)
+            except ValueError:
+                print(
+                    f"Ошибка: значение '{raw_value}' не подходит "
+                    f"для типа int (столбец {key})"
+                )
+                return
+
+        elif column_type == "bool":
+            if raw_value.lower() in ("true", "1", "yes"):
+                result[key] = True
+            elif raw_value.lower() in ("false", "0", "no"):
+                result[key] = False
+            else:
+                print(
+                    f"Ошибка: значение '{raw_value}' не подходит "
+                    f"для типа bool (столбец {key})"
+                )
+                return
+
+        elif column_type == "str":
+            if raw_value == "":
+                print("Ошибка: строковое значение не должно быть пустым")
+                return
+            result[key] = raw_value
+
+        else:
+            print(f"Ошибка: неизвестный тип {column_type} для столбца {key}")
+            return
+
+    return result
 
 def run():
     """Основная функция запуска программы"""
@@ -113,58 +176,8 @@ def run():
 
             where_clause = None
             if len(args) >= 3:
-                where_clause = {}
-                has_error = False
-
-                #проверка одного и более условия
-                for item in args[2:]:
-                    if "=" not in item:
-                        print("Ошибка: условие должно быть в формате столбец=значение")
-                        has_error = True
-                        break
-
-                    key, raw_value = item.split("=", 1)
-                    key = key.strip()
-                    raw_value = raw_value.strip()
-
-                    if key not in schema:
-                        print(f"Ошибка: столбца '{key}' нет в таблице '{table_name}'")
-                        has_error = True
-                        break
-
-                    column_type = schema[key]
-
-                    if column_type == "int":
-                        try:
-                            where_clause[key] = int(raw_value)
-                        except ValueError:
-                            print(f"Ошибка: значение '{raw_value}' не подходит",
-                                   "для типа int (столбец {key})")
-                            has_error = True
-                            break
-
-                    elif column_type == "bool":
-                        value_lower = raw_value.lower()
-                        if value_lower in ("true", "1", "yes"):
-                            where_clause[key] = True
-                        elif value_lower in ("false", "0", "no"):
-                            where_clause[key] = False
-                        else:
-                            print(f"Ошибка: значение '{raw_value}' не подходит", 
-                                  "для типа bool (столбец {key})")
-                            has_error = True
-                            break
-
-                    elif column_type == "str":
-                        where_clause[key] = raw_value
-
-                    else:
-                        print(f"Ошибка: неизвестный тип {column_type}",
-                               "для столбца {key}")
-                        has_error = True
-                        break
-
-                if has_error:
+                where_clause = parse_conditions(schema, args[2:])
+                if where_clause is None:
                     continue
 
             result = select(table_data, where_clause)
@@ -174,6 +187,94 @@ def run():
             else:
                 for row in result:
                     print(row)
+
+        elif command == "delete": #удалить записи из таблицы
+            metadata = load_metadata(FILE_PATH)
+            if metadata is None:
+                metadata = {}
+
+            if len(args) < 3:
+                print("Ошибка: укажите имя таблицы и условия удаления")
+                show_help()
+                continue
+
+            table_name = args[1]
+
+            if table_name not in metadata:
+                print(f"Таблицы {table_name} не существует")
+                continue
+
+            schema = metadata[table_name]
+            table_data = load_table_data(table_name)
+
+            where_clause = parse_conditions(schema, args[2:])
+            if where_clause is None:
+                continue
+
+            new_data = delete(table_data, where_clause)
+            deleted_count = len(table_data) - len(new_data)
+
+            save_table_data(table_name, new_data)
+            print(f"Удалено записей: {deleted_count}")
+
+        elif command == "update": #обновить записи в таблице
+            metadata = load_metadata(FILE_PATH)
+            if metadata is None:
+                metadata = {}
+
+            if len(args) < 6:
+                print("Ошибка: недостаточно аргументов")
+                show_help()
+                continue
+
+            table_name = args[1]
+
+            if table_name not in metadata:
+                print(f"Таблицы {table_name} не существует")
+                continue
+
+            schema = metadata[table_name]
+            table_data = load_table_data(table_name)
+
+            args_lower = [x.lower() for x in args]
+            if "set" not in args_lower or "where" not in args_lower:
+                print("Ошибка: используйте формат update <таблица> set ... where ...")
+                show_help()
+                continue
+
+            set_index = args_lower.index("set")
+            where_index = args_lower.index("where")
+
+            if set_index >= where_index:
+                print("Ошибка: сначала должен быть set, затем where")
+                show_help()
+                continue
+
+            set_items = args[set_index + 1:where_index]
+            where_items = args[where_index + 1:]
+
+            if set_items == [] or where_items == []:
+                print("Ошибка: set и where не должны быть пустыми")
+                show_help()
+                continue
+
+            set_clause = parse_conditions(schema, set_items)
+            if set_clause is None:
+                continue
+
+            if "ID" in set_clause:
+                print("Ошибка: нельзя изменять столбец ID")
+                continue
+
+            where_clause = parse_conditions(schema, where_items)
+            if where_clause is None:
+                continue
+
+            matched = len(select(table_data, where_clause))
+            new_data = update(table_data, set_clause, where_clause)
+
+            save_table_data(table_name, new_data)
+            print(f"Обновлено записей: {matched}")
 
         elif command: #неизвестная команда
             print(f"Неизвестная команда: {command}")
