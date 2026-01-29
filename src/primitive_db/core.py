@@ -1,11 +1,12 @@
+from .decorators import confirm_action, handle_db_errors, log_time
 from .utils import load_table_data
 
 
+@handle_db_errors #декоратор
 def create_table(metadata, table_name, columns):
     #слздаем новую таблицу
     if table_name in metadata:
-        print(f"Таблица с именем '{table_name}' уже существует")
-        return
+        raise ValueError(f"Таблица с именем '{table_name}' уже существует")
     
     valid_types = {"int", "str", "bool"}
 
@@ -16,9 +17,10 @@ def create_table(metadata, table_name, columns):
     for i, column in enumerate(columns):
         column = column.split(":")
         if column[1] not in valid_types:
-            print(f"Некорректный тип {column[1]} для столбца {column[0]}\n")
-            print(f"Допустимые типы: {', '.join(valid_types)}")
-            return
+            raise ValueError(
+                f"Некорректный тип {column[1]} для столбца {column[0]}. "
+                f"Допустимые типы: {', '.join(valid_types)}"
+            )
         
         columns_dict[column[0]] = column[1]
     
@@ -26,12 +28,12 @@ def create_table(metadata, table_name, columns):
     
     return metadata
 
-
+@confirm_action("удаление таблицы")
+@handle_db_errors #декоратор
 def drop_table(metadata, table_name):
     #удаляем существующую таблицу
     if table_name not in metadata:
-        print(f"Таблицы {table_name} не существует")
-        return
+        raise KeyError(table_name)
 
     metadata.pop(table_name)
 
@@ -44,11 +46,12 @@ def list_tables(metadata):
         return None
     return list(metadata.keys())
 
+@log_time #измерение времени
+@handle_db_errors #декоратор
 def insert(metadata, table_name, values):
     #добавление новой строки в таблицу
     if table_name not in metadata:
-        print(f"Таблицы {table_name} не существует")
-        return
+        raise KeyError(table_name)
 
     schema = metadata[table_name]
 
@@ -58,9 +61,7 @@ def insert(metadata, table_name, values):
         columns.remove("ID")
 
     if len(values) != len(columns):
-        print("Ошибка: количество значений не соответствует количеству столбцов")
-        print(f"Ожидается значений: {len(columns)}")
-        return
+        raise ValueError("Количество значений не соответствует количеству столбцов")
 
     data = load_table_data(table_name)
 
@@ -84,9 +85,10 @@ def insert(metadata, table_name, values):
             try:
                 new_row[column_name] = int(raw_value)
             except ValueError:
-                print(f"Ошибка: значение '{raw_value}' не подходит",
-                      "для типа int (столбец {column_name})")
-                return
+                raise ValueError(
+                    f"Значение '{raw_value}' не подходит "
+                    f"для типа int (столбец {column_name})"
+                )
 
         elif column_type == "bool":
             value_lower = str(raw_value).strip().lower()
@@ -95,16 +97,18 @@ def insert(metadata, table_name, values):
             elif value_lower in ("false", "0", "no"):
                 new_row[column_name] = False
             else:
-                print(f"Ошибка: значение '{raw_value}' не подходит",
-                      f"для типа bool (столбец {column_name})")
-                return
+                raise ValueError(
+                    f"Значение '{raw_value}' не подходит "
+                    f"для типа bool (столбец {column_name})"
+                )
 
         elif column_type == "str":
             new_row[column_name] = str(raw_value)
 
         else:
-            print(f"Ошибка: неизвестный тип {column_type} для столбца {column_name}")
-            return
+            raise ValueError(
+                f"Неизвестный тип {column_type} для столбца {column_name}"
+            )
 
     data.append(new_row)
 
@@ -160,6 +164,7 @@ def update(table_data, set_clause, where_clause):
 
     return table_data
 
+@confirm_action("удаление записей")
 def delete(table_data, where_clause):
     #удаляем записи из таблицы
 

@@ -1,8 +1,11 @@
+import os
 import shlex
+import time
 
 from prettytable import PrettyTable
 
-from .constants import FILE_PATH
+from .cacher import create_cacher
+from .constants import DATA_DIR, FILE_PATH
 from .core import create_table, delete, drop_table, insert, list_tables, select, update
 from .utils import load_metadata, load_table_data, save_metadata, save_table_data
 
@@ -100,6 +103,8 @@ def parse_conditions(schema, items):
 
     return result
 
+select_cache = create_cacher() #создаем кэшер
+
 def run():
     """Основная функция запуска программы"""
     show_help()
@@ -125,9 +130,9 @@ def run():
             if metadata is None:
                 metadata = {}
             if len(args) < 3:
-                    print("Ошибка: недостаточно аргументов")
-                    show_help()
-                    continue
+                print("Ошибка: недостаточно аргументов")
+                show_help()
+                continue
             table_name = args[1]
             columns = args[2:] 
             new_metadata = create_table(metadata, table_name, columns)
@@ -156,6 +161,11 @@ def run():
                 continue
             table_name = args[1]
             new_metadata = drop_table(metadata, table_name)
+
+            #при отмене удаления изменения не сохранятся
+            if new_metadata is None:
+                continue
+
             save_metadata(FILE_PATH, new_metadata)
             print(f"Таблица '{table_name}' успешно удалена")
 
@@ -198,8 +208,30 @@ def run():
                 if where_clause is None:
                     continue
 
-            result = select(table_data, where_clause)
+            #добавляем кэш
+            filepath = os.path.join(DATA_DIR, f"{table_name}.json")
+            try:
+                mtime = os.path.getmtime(filepath)
+            except FileNotFoundError:
+                mtime = 0
 
+            where_key = None
+            if where_clause is not None:
+                where_key = tuple(sorted(where_clause.items()))
+
+            cache_key = (table_name, mtime, where_key)
+
+            #для мониторинга времени выполнения команды, 
+            # даже если результат берется из кэша
+            start = time.monotonic() 
+
+            result = select_cache(
+                cache_key,
+                lambda: select(table_data, where_clause)
+            )
+
+            end = time.monotonic()
+            print(f"Функция выполнилась за {end - start:.8f} секунд.")
             print_table(result)
 
         elif command == "delete": #удалить записи из таблицы
@@ -226,6 +258,11 @@ def run():
                 continue
 
             new_data = delete(table_data, where_clause)
+
+            #при отмене удаления изменения не сохранятся
+            if new_data is None:
+                continue
+
             deleted_count = len(table_data) - len(new_data)
 
             save_table_data(table_name, new_data)

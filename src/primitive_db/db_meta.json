@@ -1,1 +1,1 @@
-{}
+{"students": {"ID": "int", "name": "str", "age": "int", "grade": "str"}}
