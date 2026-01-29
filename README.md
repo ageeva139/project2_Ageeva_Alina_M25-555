@@ -128,9 +128,12 @@ FileNotFoundError (нет файлов данных)
 Введите команду: exit
 Выход из программы...
 
-# Демонстрация CRUD-операций
+# Демонстрация 
 Демонстрация основных функций (create_table, list_tables, drop_table):
 https://asciinema.org/a/E1lA3rY5CQVbbilz
 
-Демонстрация 
+Демонстрация CRUD-операций
 https://asciinema.org/a/K1u3YCgVfctO681W
+
+Демонстрация декораторов и замыкания
+https://asciinema.org/a/ucfxjfweuBfMaAuZ
